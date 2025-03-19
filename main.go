@@ -37,6 +37,7 @@ const (
 	webCfgFile        = "webCfgFile"
 	config            = "config"
 	replicationObject = "replicationObject"
+	enableMDB         = "mdb"
 )
 
 var showStop bool
@@ -98,6 +99,10 @@ func main() {
 			Name:  replicationObject,
 			Usage: "Object to watch replication upon",
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:  enableMDB,
+			Usage: "Enable MDB monitor",
+		}),
 		&cli.StringFlag{
 			Name:  config,
 			Usage: "Optional configuration from a `YAML_FILE`",
@@ -153,6 +158,7 @@ func runMain(c *cli.Context) error {
 		Pass: c.String(ldapPass),
 		Tick: c.Duration(interval),
 		Sync: c.StringSlice(replicationObject),
+		MDB:  c.Bool(enableMDB),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -203,6 +209,10 @@ const (
 
 	monitorReplicationFilter = "contextCSN"
 	monitorReplication       = "monitorReplication"
+
+	mdbBaseDN              = "cn=Databases,cn=Monitor"
+	monitorMDBSearchFilter = "(monitoredInfo=mdb)"
+	monitorMDB             = "monitorMDB"
 )
 
 type query struct {
@@ -270,6 +280,14 @@ var (
 		},
 		[]string{"id", "type"},
 	)
+	monitorMDBGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: "openldap",
+			Name:      "monitor_mdb",
+			Help:      help(mdbBaseDN, monitorMDB),
+		},
+		[]string{"dn", "attrib"},
+	)
 	queries = []*query{
 		{
 			baseDN:       baseDN,
@@ -307,6 +325,7 @@ func init() {
 		monitorCounterObjectGauge,
 		monitorOperationGauge,
 		monitorReplicationGauge,
+		monitorMDBGauge,
 		scrapeCounter,
 		bindCounter,
 		dialCounter,
@@ -346,11 +365,15 @@ type Scraper struct {
 	LdapSync []string
 	log      *log.Logger
 	Sync     []string
+	MDB      bool
 }
 
 func (s *Scraper) Start(ctx context.Context) {
 	s.log = log.With("component", "scraper")
 	s.addReplicationQueries()
+	if s.MDB {
+		s.addMDBQueries()
+	}
 	address := fmt.Sprintf("%s://%s", s.Net, s.Addr)
 	s.log.Info("starting monitor loop", "addr", address)
 	ticker := time.NewTicker(s.Tick)
@@ -411,6 +434,45 @@ func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
 		q.metric.WithLabelValues(sid, "gt").Set(float64(gt.Unix()))
 		q.metric.WithLabelValues(sid, "count").Set(count)
 		q.metric.WithLabelValues(sid, "mod").Set(mod)
+	}
+}
+
+func (s *Scraper) addMDBQueries() {
+	for _, a := range []string{
+		"olmMDBPagesMax", "olmMDBPagesUsed", "olmMDBPagesFree",
+		"olmMDBEntries", "olmMDBReadersMax", "olmMDBReadersUsed",
+	} {
+		queries = append(queries,
+			&query{
+				baseDN:       mdbBaseDN,
+				searchFilter: monitorMDBSearchFilter,
+				searchAttr:   a,
+				metric:       monitorMDBGauge,
+				setData:      s.setMDBValue,
+			},
+		)
+	}
+
+}
+
+func (s *Scraper) setMDBValue(entries []*ldap.Entry, q *query) {
+	for _, entry := range entries {
+		val := entry.GetAttributeValue(q.searchAttr)
+		if val == "" {
+			// not every entry will have this attribute
+			continue
+		}
+		ll := s.log.With(
+			"filter", q.searchFilter,
+			"attr", q.searchAttr,
+			"value", val,
+		)
+		num, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			ll.Warn("unexpected value", "err", err)
+			continue
+		}
+		q.metric.WithLabelValues(entry.DN, q.searchAttr).Set(num)
 	}
 }
 
