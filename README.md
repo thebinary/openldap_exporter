@@ -45,6 +45,14 @@ openldap_monitor_counter_object{dn="cn=Read,cn=Waiters,cn=Monitor"} 31
 openldap_monitor_counter_object{dn="cn=Referrals,cn=Statistics,cn=Monitor"} 0
 openldap_monitor_counter_object{dn="cn=Total,cn=Connections,cn=Monitor"} 65383
 openldap_monitor_counter_object{dn="cn=Write,cn=Waiters,cn=Monitor"} 0
+ HELP openldap_monitor_mdb cn=Databases,cn=Monitor monitorMDB
+# TYPE openldap_monitor_mdb gauge
+openldap_monitor_mdb{attrib="olmMDBEntries",dn="cn=Database 1,cn=Databases,cn=Monitor"} 1.49321e+06
+openldap_monitor_mdb{attrib="olmMDBPagesFree",dn="cn=Database 1,cn=Databases,cn=Monitor"} 103715
+openldap_monitor_mdb{attrib="olmMDBPagesMax",dn="cn=Database 1,cn=Databases,cn=Monitor"} 1.835008e+06
+openldap_monitor_mdb{attrib="olmMDBPagesUsed",dn="cn=Database 1,cn=Databases,cn=Monitor"} 1.310719e+06
+openldap_monitor_mdb{attrib="olmMDBReadersMax",dn="cn=Database 1,cn=Databases,cn=Monitor"} 126
+openldap_monitor_mdb{attrib="olmMDBReadersUsed",dn="cn=Database 1,cn=Databases,cn=Monitor"} 17
 # HELP openldap_monitor_operation cn=Operations,cn=Monitor (objectClass=monitorOperation) monitorOpCompleted
 # TYPE openldap_monitor_operation gauge
 openldap_monitor_operation{dn="cn=Abandon,cn=Operations,cn=Monitor"} 0
